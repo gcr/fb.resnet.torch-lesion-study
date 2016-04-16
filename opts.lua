@@ -46,6 +46,12 @@ function M.parse(arg)
    cmd:option('-shareGradInput',  'false', 'Share gradInput tensors to reduce memory usage')
    cmd:option('-resetClassifier', 'false', 'Reset the fully connected layer for fine-tuning')
    cmd:option('-nClasses',         0,      'Number of classes in the dataset')
+
+
+   -------- Other things regarding our lesion study ------------
+   cmd:option('-modelPath', 'none', 'Path to the model to load')
+   cmd:option('-saveClassAccuracy', 'class-acc.msgpack', 'Path to save classwise accuracy to')
+   cmd:option('-deleteBlock', 0, 'Which block to delete?')
    cmd:text()
 
    local opt = cmd:parse(arg or {})

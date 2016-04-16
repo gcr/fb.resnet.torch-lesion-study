@@ -92,6 +92,8 @@ function Trainer:test(epoch, dataloader)
    local top1Sum, top5Sum = 0.0, 0.0
    local N = 0
 
+   local classAccuracy = {}
+
    self.model:evaluate()
    for n, sample in dataloader:run() do
       local dataTime = dataTimer:time().real
@@ -102,7 +104,7 @@ function Trainer:test(epoch, dataloader)
       local output = self.model:forward(self.input):float()
       local loss = self.criterion:forward(self.model.output, self.target)
 
-      local top1, top5 = self:computeScore(output, sample.target, nCrops)
+      local top1, top5 = self:computeScore(output, sample.target, nCrops, classAccuracy)
       top1Sum = top1Sum + top1
       top5Sum = top5Sum + top5
       N = N + 1
@@ -112,16 +114,17 @@ function Trainer:test(epoch, dataloader)
 
       timer:reset()
       dataTimer:reset()
+      --print(classAccuracy)
    end
    self.model:training()
 
    print((' * Finished epoch # %d     top1: %7.3f  top5: %7.3f\n'):format(
       epoch, top1Sum / N, top5Sum / N))
 
-   return top1Sum / N, top5Sum / N
+   return top1Sum / N, top5Sum / N, classAccuracy
 end
 
-function Trainer:computeScore(output, target, nCrops)
+function Trainer:computeScore(output, target, nCrops, classAccuracy)
    if nCrops > 1 then
       -- Sum over crops
       output = output:view(output:size(1) / nCrops, nCrops, output:size(2))
@@ -137,6 +140,23 @@ function Trainer:computeScore(output, target, nCrops)
    -- Find which predictions match the target
    local correct = predictions:eq(
       target:long():view(batchSize, 1):expandAs(output))
+
+   for i=1,batchSize do
+      -- Save prediction counts into classAccuracy
+      local actual_target = target:view(batchSize)[i]
+      local guessed_correct1 = correct:narrow(2, 1, 1)[i][1]
+      local guessed_correct5 = correct:narrow(2, 1, 5):sum(2)[i][1]
+      if classAccuracy and classAccuracy[actual_target] == nil then
+         classAccuracy[actual_target] = {["total"]=0, ["correct1"]=0, ["correct5"]=0}
+      end
+      classAccuracy[actual_target]["total"] = classAccuracy[actual_target]["total"] + 1
+      if guessed_correct1 == 1 then
+        classAccuracy[actual_target]["correct1"] = classAccuracy[actual_target]["correct1"] + 1
+     end
+      if guessed_correct5 == 1 then
+        classAccuracy[actual_target]["correct5"] = classAccuracy[actual_target]["correct5"] + 1
+     end
+   end
 
    -- Top-1 score
    local top1 = 1.0 - (correct:narrow(2, 1, 1):sum() / batchSize)
@@ -172,3 +192,4 @@ function Trainer:learningRate(epoch)
 end
 
 return M.Trainer
+

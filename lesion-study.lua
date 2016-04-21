@@ -31,26 +31,47 @@ local criterion = nn.CrossEntropyCriterion():cuda()
 -- Data loading
 local trainLoader, valLoader = DataLoader.create(opt)
 
-
 -- Seek and destroy: Gather all resnet modules.
 function gather_residual_blocks(model)
+    -- A residual block is a block that has type 'nn.Sequential' and ends with
+    -- an 'nn.CAddTable'. (This is true for the 200-layer module)
     local found_resnet_blocks = {}
     model:apply(function(module)
         if (torch.typename(module)=='nn.Sequential' 
-            and module.modules 
-            and torch.typename(module.modules[#module.modules-1])=='nn.CAddTable') then
-            found_resnet_blocks[#found_resnet_blocks+1] = module
+            and module.modules ) then
+            if (torch.typename(module.modules[#module.modules-1])=='nn.CAddTable'
+                or torch.typename(module.modules[#module.modules])=='nn.CAddTable') then
+                found_resnet_blocks[#found_resnet_blocks+1] = module
+            end
         end
     end)
     return found_resnet_blocks
 end
+function delete_layer(block)
+    assert(torch.typename(block) == 'nn.Sequential')
+    local concat = block.modules[1]
+    assert(torch.typename(concat) == 'nn.ConcatTable')
+    -- The branches are the two sides. Drop the first one; the second one will
+    -- be the identity layer or the downsampling layer.
+    --[[
+    if torch.typename(concat.modules[1]) == 'nn.Identity' then
+        print "Dropping the entire thing"
+        block.modules = {}
+        block.gradInput = torch.Tensor()
+        block.output = torch.Tensor()
+    else
+    --]]
+    table.remove(concat.modules, 1)
+    --concat.gradInput = torch.Tensor()
+    --concat.output = torch.Tensor()
+    --end
+end
 
 if opt.deleteBlock ~= 0 then
     print("Deleting block ",opt.deleteBlock)
-    local block = gather_residual_blocks(model)[opt.deleteBlock]
-    block.modules = {}
-    block.gradInput = torch.Tensor()
-    block.output = torch.Tensor()
+    local blocks = gather_residual_blocks(model)
+    print("There are ", #blocks, " blocks in total")
+    delete_layer(blocks[opt.deleteBlock])
 end
 
 

@@ -51,7 +51,9 @@ function M.parse(arg)
    -------- Other things regarding our lesion study ------------
    cmd:option('-modelPath', 'none', 'Path to the model to load')
    cmd:option('-saveClassAccuracy', 'class-acc.msgpack', 'Path to save classwise accuracy to')
-   cmd:option('-deleteBlock', 0, 'Which block to delete?')
+   cmd:option('-deleteBlock', 'none', 'Which block(s) to delete?')
+   cmd:option('-permuteBlock', 'none', 'Which block(s) to permute? Format: 1-2, 3-4, 5-6, ...')
+   cmd:option('-duplicateBlock', 'none', 'Which block(s) to duplicate?')
    cmd:text()
 
    local opt = cmd:parse(arg or {})

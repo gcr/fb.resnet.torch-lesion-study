@@ -37,7 +37,7 @@ function gather_residual_blocks(model)
     -- an 'nn.CAddTable'. (This is true for the 200-layer module)
     local found_resnet_blocks = {}
     model:apply(function(module)
-        if (torch.typename(module)=='nn.Sequential' 
+        if (torch.typename(module)=='nn.Sequential'
             and module.modules ) then
             if (torch.typename(module.modules[#module.modules-1])=='nn.CAddTable'
                 or torch.typename(module.modules[#module.modules])=='nn.CAddTable') then
@@ -66,18 +66,45 @@ function delete_layer(block)
     --concat.output = torch.Tensor()
     --end
 end
+function permute_layers(block1, block2)
+    local tmp_mods = block2.modules
+    block2.modules = block1.modules
+    block1.modules = tmp_mods
+    block1.output = {}
+    block2.output = {}
+end
+function duplicate_layer(block)
+   block.modules[#block.modules+1] = block:clone()
+   block.output = {}
+end
 
-if opt.deleteBlock ~= 0 then
-    print("Deleting block ",opt.deleteBlock)
-    local blocks = gather_residual_blocks(model)
-    print("There are ", #blocks, " blocks in total")
-    delete_layer(blocks[opt.deleteBlock])
+-- surgery time!
+local blocks = gather_residual_blocks(model)
+print("There are ", #blocks, " blocks in total")
+
+if opt.duplicateBlock ~= 'none' then
+    for _,blk in ipairs(string.split(opt.duplicateBlock, ",")) do
+       print("Duplicating block "..blk)
+       duplicate_layer(blocks[tonumber(blk)])
+    end
+end
+if opt.permuteBlock ~= 'none' then
+    for _,pair in ipairs(string.split(opt.permuteBlock, ",")) do
+        local a,b = unpack(string.split(pair, "-"))
+        print("Permuting blocks "..a.." and "..b)
+        permute_layers(blocks[tonumber(a)], blocks[tonumber(b)])
+    end
+end
+if opt.deleteBlock ~= 'none' then
+    for _,blk in ipairs(string.split(opt.deleteBlock, ",")) do
+        print("Deleting block ",blk)
+        delete_layer(blocks[tonumber(blk)])
+    end
 end
 
 
 -- The trainer handles the training loop and evaluation on validation set
 local trainer = Trainer(model, criterion, opt, optimState)
-
 
 local top1Err, top5Err, classAccuracy = trainer:test(0, valLoader)
 

@@ -14,9 +14,11 @@ local optim = require 'optim'
 local M = {}
 local Trainer = torch.class('resnet.Trainer', M)
 
-function Trainer:__init(model, criterion, opt, optimState)
+function Trainer:__init(model, criterion, opt, optimState, trainLog, testLog)
    self.model = model
    self.criterion = criterion
+   self.trainLog = trainLog
+   self.testLog = testLog
    self.optimState = optimState or {
       learningRate = opt.LR,
       learningRateDecay = 0.0,
@@ -73,6 +75,9 @@ function Trainer:train(epoch, dataloader)
 
       -- check that the storage didn't get changed do to an unfortunate getParameters call
       assert(self.params:storage() == self.model:parameters()[1]:storage())
+      if self.trainLog then
+          self.trainLog{loss = loss,  epoch = epoch-1 + n / trainSize}
+      end
 
       timer:reset()
       dataTimer:reset()
@@ -118,6 +123,9 @@ function Trainer:test(epoch, dataloader)
    end
    self.model:training()
 
+   if self.testLog then
+       self.testLog{epoch = epoch, top1 = top1Sum/N, top5 = top5Sum/N}
+   end
    print((' * Finished epoch # %d     top1: %7.3f  top5: %7.3f\n'):format(
       epoch, top1Sum / N, top5Sum / N))
 
@@ -146,15 +154,17 @@ function Trainer:computeScore(output, target, nCrops, classAccuracy)
       local actual_target = target:view(batchSize)[i]
       local guessed_correct1 = correct:narrow(2, 1, 1)[i][1]
       local guessed_correct5 = correct:narrow(2, 1, 5):sum(2)[i][1]
-      if classAccuracy and classAccuracy[actual_target] == nil then
-         classAccuracy[actual_target] = {["total"]=0, ["correct1"]=0, ["correct5"]=0}
-      end
-      classAccuracy[actual_target]["total"] = classAccuracy[actual_target]["total"] + 1
-      if guessed_correct1 == 1 then
-        classAccuracy[actual_target]["correct1"] = classAccuracy[actual_target]["correct1"] + 1
-     end
-      if guessed_correct5 == 1 then
-        classAccuracy[actual_target]["correct5"] = classAccuracy[actual_target]["correct5"] + 1
+      if classAccuracy then
+        if classAccuracy and classAccuracy[actual_target] == nil then
+            classAccuracy[actual_target] = {["total"]=0, ["correct1"]=0, ["correct5"]=0}
+        end
+        classAccuracy[actual_target]["total"] = classAccuracy[actual_target]["total"] + 1
+        if guessed_correct1 == 1 then
+            classAccuracy[actual_target]["correct1"] = classAccuracy[actual_target]["correct1"] + 1
+        end
+        if guessed_correct5 == 1 then
+            classAccuracy[actual_target]["correct5"] = classAccuracy[actual_target]["correct5"] + 1
+        end
      end
    end
 

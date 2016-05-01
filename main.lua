@@ -22,6 +22,15 @@ local opt = opts.parse(arg)
 torch.manualSeed(opt.manualSeed)
 cutorch.manualSeedAll(opt.manualSeed)
 
+local workbook = require('lab-workbook'):newExperiment{}
+workbook:saveGitStatus()
+workbook:saveJSON("opt", opt)
+local trainLog = workbook:newTimeSeriesLog("Training loss",
+                                           {"epoch","loss"},
+                                           100)
+local testLog = workbook:newTimeSeriesLog("Test error",
+                                          {"epoch", "top1", "top5"})
+
 -- Load previous checkpoint, if it exists
 local checkpoint, optimState = checkpoints.latest(opt)
 local optimState = checkpoint and torch.load(checkpoint.optimFile) or nil
@@ -33,7 +42,7 @@ local model, criterion = models.setup(opt, checkpoint)
 local trainLoader, valLoader = DataLoader.create(opt)
 
 -- The trainer handles the training loop and evaluation on validation set
-local trainer = Trainer(model, criterion, opt, optimState)
+local trainer = Trainer(model, criterion, opt, optimState, trainLog, testLog)
 
 if opt.testOnly then
    local top1Err, top5Err = trainer:test(0, valLoader)
@@ -59,7 +68,7 @@ for epoch = startEpoch, opt.nEpochs do
       print(' * Best model ', testTop1, testTop5)
    end
 
-   checkpoints.save(epoch, model, trainer.optimState, bestModel)
+   checkpoints.save(epoch, model, trainer.optimState, bestModel, workbook.tag)
 end
 
 print(string.format(' * Finished top1: %6.3f  top5: %6.3f', bestTop1, bestTop5))

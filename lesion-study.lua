@@ -10,6 +10,7 @@ require 'torch'
 require 'paths'
 require 'optim'
 require 'nn'
+require 'Stochastic_Depth/ResidualDrop'
 local DataLoader = require 'dataloader'
 local models = require 'models/init'
 local Trainer = require 'train'
@@ -44,27 +45,37 @@ function gather_residual_blocks(model)
                 found_resnet_blocks[#found_resnet_blocks+1] = module
             end
         end
+        if (torch.typename(module)=='nn.ResidualDrop') then
+           -- Found the module
+           module.gate = true -- let everything flow!
+           found_resnet_blocks[#found_resnet_blocks+1] = module
+        end
     end)
     return found_resnet_blocks
 end
 function delete_layer(block)
-    assert(torch.typename(block) == 'nn.Sequential')
-    local concat = block.modules[1]
-    assert(torch.typename(concat) == 'nn.ConcatTable')
-    -- The branches are the two sides. Drop the first one; the second one will
-    -- be the identity layer or the downsampling layer.
-    --[[
-    if torch.typename(concat.modules[1]) == 'nn.Identity' then
-        print "Dropping the entire thing"
-        block.modules = {}
-        block.gradInput = torch.Tensor()
-        block.output = torch.Tensor()
-    else
-    --]]
-    table.remove(concat.modules, 1)
-    --concat.gradInput = torch.Tensor()
-    --concat.output = torch.Tensor()
-    --end
+   if torch.typename(block) == 'nn.Sequential' then
+      local concat = block.modules[1]
+      assert(torch.typename(concat) == 'nn.ConcatTable')
+      -- The branches are the two sides. Drop the first one; the second one will
+      -- be the identity layer or the downsampling layer.
+      --[[
+      if torch.typename(concat.modules[1]) == 'nn.Identity' then
+      print "Dropping the entire thing"
+      block.modules = {}
+      block.gradInput = torch.Tensor()
+      block.output = torch.Tensor()
+      else
+      --]]
+      table.remove(concat.modules, 1)
+      --concat.gradInput = torch.Tensor()
+      --concat.output = torch.Tensor()
+      --end
+   elseif torch.typename(block) == 'nn.ResidualDrop' then
+      block.SUPPRESS_DURING_TESTING = true
+   else
+      error 'Unknown layer type'
+   end
 end
 function permute_layers(block1, block2)
     local tmp_mods = block2.modules
